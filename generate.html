@@ -17,12 +17,11 @@
         <ul class="navbar-nav">
           <li class="nav-item"><a class="nav-link" href="index.html">🔍 Rechercher Câble</a></li>
           <li class="nav-item"><a class="nav-link" href="appareil.html">📡 Rechercher Appareil</a></li>
-          <li class="nav-item"><a class="nav-link" href="generate.html">🛠 Générer JSON</a></li>
+          <li class="nav-item"><a class="nav-link active" href="generate.html">🛠 Générer JSON</a></li>
         </ul>
       </div>
     </div>
   </nav>
-
 
   <div class="container">
     <h1 class="mb-4">🛠 Générer <code>cables-min.json</code> depuis un fichier NEC (.xlsb)</h1>
@@ -31,10 +30,7 @@
     <div id="message"></div>
 
     <a id="downloadLink" class="btn btn-success mt-3 d-none" download="cables-min.json">📥 Télécharger cables-min.json</a>
-
-    <button class="btn btn-outline-secondary mt-3 ms-2" disabled title="À venir">
-      📤 Uploader vers GitHub (prochainement)
-    </button>
+    <button id="uploadBtn" class="btn btn-outline-primary mt-3 ms-2 d-none">📤 Uploader vers GitHub</button>
   </div>
 
   <script>
@@ -44,7 +40,10 @@
       "APO", "LOCAL_APO", "LOT_MTG_APO"
     ];
 
+    let jsonMin = null;
+
     document.getElementById("upload").addEventListener("change", handleFile);
+    document.getElementById("uploadBtn").addEventListener("click", uploadToGitHub);
 
     function handleFile(e) {
       const file = e.target.files[0];
@@ -61,7 +60,7 @@
           const sheet = workbook.Sheets[sheetName];
           const jsonRaw = XLSX.utils.sheet_to_json(sheet, {defval: ""});
 
-          const jsonMin = jsonRaw.map(row => {
+          jsonMin = jsonRaw.map(row => {
             const obj = {};
             colonnesUtile.forEach(col => obj[col] = row[col] ?? "");
             return obj;
@@ -73,7 +72,10 @@
           const link = document.getElementById("downloadLink");
           link.href = url;
           link.classList.remove("d-none");
-          showMsg(`✅ ${jsonMin.length} câbles extraits. Fichier prêt à télécharger.`, "success");
+
+          document.getElementById("uploadBtn").classList.remove("d-none");
+
+          showMsg(`✅ ${jsonMin.length} câbles extraits.`, "success");
         } catch (err) {
           console.error(err);
           showMsg("❌ Erreur lors de la lecture du fichier", "danger");
@@ -85,7 +87,58 @@
     function showMsg(msg, type = "info") {
       document.getElementById("message").innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
     }
+
+    async function uploadToGitHub() {
+      if (!jsonMin) return;
+
+      const GITHUB_TOKEN = "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"; // Faut que je trouve un moyen de securiser ça haha
+      const owner = "pvarc";
+      const repo = "elec";
+      const path = "cables-min.json";
+      const branch = "main";
+
+      const content = btoa(unescape(encodeURIComponent(JSON.stringify(jsonMin, null, 2))));
+
+      // Vérifier si le fichier existe pour récupérer son SHA
+      let sha = null;
+      try {
+        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
+          headers: { Authorization: `token ${GITHUB_TOKEN}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          sha = data.sha;
+        }
+      } catch (err) {
+        console.warn("Fichier non trouvé (création nouvelle).");
+      }
+
+      const body = {
+        message: "🔄 Mise à jour automatique de cables-min.json",
+        content: content,
+        branch: branch
+      };
+      if (sha) body.sha = sha;
+
+      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `token ${GITHUB_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (res.ok) {
+        showMsg("✅ Fichier mis à jour sur GitHub !", "success");
+      } else {
+        showMsg("❌ Échec de l'upload sur GitHub", "danger");
+        console.error(await res.json());
+      }
+    }
   </script>
+
+  <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
