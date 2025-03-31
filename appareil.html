@@ -74,7 +74,7 @@ if ((String(row["APA"] || "")).toUpperCase() === appCode) {
                 Local: row["LOCAL_APA"] || "-"
               };
             }
-            if ((row["APO"] || "").toUpperCase() === appCode) {
+  if ((String(row["APO"] || "")).toUpperCase() === appCode) {
               return {
                 CBL: row["CBL"],
                 Direction: "Départ",
