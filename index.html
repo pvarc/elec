@@ -9,12 +9,24 @@
 <body class="p-4 bg-light">
   <div class="container">
     <h1 class="mb-4">Visualiseur de fichier Excel (.xlsb)</h1>
-    <input type="file" id="upload" accept=".xlsb" class="form-control mb-4">
+    <input type="file" id="upload" accept=".xlsb" class="form-control mb-3">
+
+    <div class="mb-3">
+      <label for="sheetSelector" class="form-label">Choisir une feuille :</label>
+      <select id="sheetSelector" class="form-select"></select>
+    </div>
+
     <div id="output" class="table-responsive"></div>
   </div>
 
   <script>
+    let workbookGlobal;
+
     document.getElementById('upload').addEventListener('change', handleFile, false);
+    document.getElementById('sheetSelector').addEventListener('change', function() {
+      const sheetName = this.value;
+      renderSheet(sheetName);
+    });
 
     function handleFile(e) {
       const file = e.target.files[0];
@@ -24,14 +36,29 @@
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, {type: 'array'});
 
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
-
-        renderTable(jsonData);
+        workbookGlobal = workbook; // stocker globalement
+        populateSheetSelector(workbook.SheetNames);
+        renderSheet(workbook.SheetNames[0]); // afficher la première feuille
       };
 
       reader.readAsArrayBuffer(file);
+    }
+
+    function populateSheetSelector(sheetNames) {
+      const selector = document.getElementById('sheetSelector');
+      selector.innerHTML = '';
+      sheetNames.forEach(name => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        selector.appendChild(option);
+      });
+    }
+
+    function renderSheet(sheetName) {
+      const worksheet = workbookGlobal.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+      renderTable(jsonData);
     }
 
     function renderTable(data) {
