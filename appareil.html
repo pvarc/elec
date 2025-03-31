@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Recherche Appareil</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-4 bg-light">
+  <div class="container">
+    <h1 class="mb-4">🔌 Rechercher un appareil</h1>
+
+    <div class="input-group mb-4">
+      <input type="text" id="appareilInput" class="form-control" placeholder="Nom de l'appareil (ex: ARH4062)">
+      <button class="btn btn-primary" onclick="searchAppareil()">Rechercher</button>
+    </div>
+
+    <div id="resultArea"></div>
+    <hr class="my-5">
+    <a href="index.html" class="btn btn-secondary">⬅️ Retour à la recherche de câble</a>
+  </div>
+
+  <script>
+    let db;
+    const request = indexedDB.open("CablesDB", 2);
+
+    request.onsuccess = function(event) {
+      db = event.target.result;
+    };
+
+    function searchAppareil() {
+      const appCode = document.getElementById('appareilInput').value.trim().toUpperCase();
+      if (!appCode) {
+        showMessage("Veuillez entrer un nom d'appareil.", "danger");
+        return;
+      }
+
+      const tx = db.transaction("cables", "readonly");
+      const store = tx.objectStore("cables");
+      const req = store.getAll();
+
+      req.onsuccess = function() {
+        const rows = req.result;
+
+        const cables = rows
+          .map(row => {
+            if ((row["APA"] || "").toUpperCase() === appCode) {
+              return {
+                CBL: row["CBL"],
+                Direction: "Arrivée",
+                Statut: row["STT_CBL_BORD"] || "-",
+                Type: row["PT_CBL"] || "-",
+                Lot: row["LOT_MTG_APA"] || "-",
+                Local: row["LOCAL_APA"] || "-"
+              };
+            }
+            if ((row["APO"] || "").toUpperCase() === appCode) {
+              return {
+                CBL: row["CBL"],
+                Direction: "Départ",
+                Statut: row["STT_CBL_BORD"] || "-",
+                Type: row["PT_CBL"] || "-",
+                Lot: row["LOT_MTG_APO"] || "-",
+                Local: row["LOCAL_APO"] || "-"
+              };
+            }
+            return null;
+          })
+          .filter(Boolean);
+
+        if (cables.length === 0) {
+          showMessage(`Aucun câble trouvé pour l'appareil : ${appCode}`, "warning");
+        } else {
+          renderCableTable(appCode, cables);
+        }
+      };
+    }
+
+    function showMessage(msg, type = "info") {
+      document.getElementById("resultArea").innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+    }
+
+    function renderCableTable(appName, cables) {
+      let html = `
+        <h4>🔎 Câbles associés à l'appareil <strong>${appName}</strong></h4>
+        <div class="table-responsive mt-3">
+          <table class="table table-bordered table-striped">
+            <thead class="table-light">
+              <tr>
+                <th>Câble</th>
+                <th>Direction</th>
+                <th>Statut</th>
+                <th>Type</th>
+                <th>Lot</th>
+                <th>Local</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${cables.map(c => `
+                <tr>
+                  <td>${c.CBL}</td>
+                  <td>${c.Direction}</td>
+                  <td>${c.Statut}</td>
+                  <td>${c.Type}</td>
+                  <td>${c.Lot}</td>
+                  <td>${c.Local}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      document.getElementById('resultArea').innerHTML = html;
+    }
+  </script>
+</body>
+</html>
