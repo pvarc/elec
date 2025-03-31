@@ -28,7 +28,14 @@
 
   <script>
     let db;
-    const request = indexedDB.open("CablesDB", 2);
+const request = indexedDB.open("CablesDB", 2); // ou 1 si tu veux
+
+request.onupgradeneeded = function(event) {
+  db = event.target.result;
+  if (!db.objectStoreNames.contains("cables")) {
+    db.createObjectStore("cables", { keyPath: "id", autoIncrement: true });
+  }
+};
 
     request.onupgradeneeded = function(event) {
       db = event.target.result;
