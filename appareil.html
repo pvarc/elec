@@ -62,10 +62,9 @@
 
       req.onsuccess = function() {
         const rows = req.result;
-
+if ((String(row["APA"] || "")).toUpperCase() === appCode) {
         const cables = rows
           .map(row => {
-            if ((row["APA"] || "").toUpperCase() === appCode) {
               return {
                 CBL: row["CBL"],
                 Direction: "Arrivée",
