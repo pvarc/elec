@@ -4,13 +4,25 @@
   <meta charset="UTF-8">
   <title>Recherche Câble</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .section-title {
+      font-weight: bold;
+      font-size: 1.1rem;
+      margin-top: 1rem;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 4px;
+    }
+    .field {
+      margin-bottom: 4px;
+    }
+  </style>
 </head>
 <body class="p-4 bg-light">
   <div class="container">
     <h1 class="mb-4">🔍 Rechercher un câble</h1>
 
     <div class="input-group mb-4">
-      <input type="text" id="cblInput" class="form-control" placeholder="Entrez le code CBL (ex: 436ACU02)">
+      <input type="text" id="cblInput" class="form-control" placeholder="Entrez le code CBL (ex: A4A7CBE)">
       <button class="btn btn-primary" onclick="searchCable()">Rechercher</button>
     </div>
 
@@ -30,7 +42,7 @@
     function searchCable() {
       const cblCode = document.getElementById('cblInput').value.trim().toUpperCase();
       if (!cblCode) {
-        showError("Veuillez entrer un code CBL.");
+        showMessage("Veuillez entrer un code CBL.", "danger");
         return;
       }
 
@@ -43,49 +55,55 @@
         if (result) {
           renderCableCard(result);
         } else {
-          showError(`Aucun câble trouvé avec le code : ${cblCode}`);
+          showMessage(`Aucun câble trouvé avec le code : ${cblCode}`, "danger");
         }
       };
     }
 
-    function showError(msg) {
-      document.getElementById('resultArea').innerHTML = `<div class="alert alert-danger">${msg}</div>`;
+    function showMessage(msg, type = "info") {
+      document.getElementById("resultArea").innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+    }
+
+    function renderSection(title, fields, data) {
+      return `
+        <div class="section">
+          <div class="section-title">${title}</div>
+          ${fields.map(f => `<div class="field"><strong>${f} :</strong> ${data[f] ?? "-"}</div>`).join("")}
+        </div>
+      `;
     }
 
     function renderCableCard(data) {
-      const createField = (label, value) => `<div><strong>${label} :</strong> ${value || '-'}</div>`;
+      const sections = [
+        {
+          title: "📌 Identité du câble",
+          fields: ["CBL", "NAV", "GAM", "IND_GAM", "COD_IND_CBL", "COD_PLAN"]
+        },
+        {
+          title: "📅 Dates clés",
+          fields: ["DATE_TIR_PLUS_TARD", "DAT_CONT_JAL_CBL", "DATE_BESOIN_URG", "DATE_CREATION", "DATE_LIVRAISON", "DATE_APPEL", "DATE_EDITION_FDC"]
+        },
+        {
+          title: "⚙️ Données techniques",
+          fields: ["STT_CBL_BE", "STT_CBL_BORD", "CBL_TGV_BE", "CBL_TGV_BORD", "PRIX_CBL_MAX", "PRIX_CBL_REEL", "LNG_TOTAL", "LNG_THEO", "LNG_TH_x_COEF"]
+        },
+        {
+          title: "🚧 Routage & montage",
+          fields: ["RESP_TIRAGE", "RESP_ROUT", "COD_ROUTAGE", "CBL_ROUTABLE", "OBJECTIF_ROUTE_CBL", "OBJECTIF_VAL_CBL"]
+        },
+        {
+          title: "🏭 Appareils / Lot",
+          fields: ["APA", "APO", "LOT_MTG_APA", "LOT_MTG_APO", "T_APP_APA", "T_APP_APO", "LOCAL_APA", "LOCAL_APO"]
+        }
+      ];
 
       const html = `
         <div class="card border-primary mb-4">
-          <div class="card-header bg-primary text-white">🔌 Câble : ${data["CBL"] || "?"}</div>
+          <div class="card-header bg-primary text-white">
+            🔌 Câble : ${data["CBL"] || "?"}
+          </div>
           <div class="card-body">
-            <h5 class="card-title mb-3">Appareil d'origine</h5>
-            ${createField("Repère", data["APP_ORIG"])}
-            ${createField("Local", data["LOCAL_ORIG"])}
-            ${createField("Lot étude", data["LOT_ETUDE_ORIG"])}
-            ${createField("Hauteur", data["HAUTEUR_ORIG"])}
-            ${createField("Couple", data["COUPLE_ORIG"])}
-            ${createField("Distance/Axe", data["DIST_AXE_ORIG"])}
-            ${createField("Type appareil", data["TYPE_APP_ORIG"])}
-            ${createField("Désignation", data["DESIG_APP_ORIG"])}
-            <hr>
-            <h5 class="card-title mb-3">Appareil d'arrivée</h5>
-            ${createField("Repère", data["APP_ARR"])}
-            ${createField("Local", data["LOCAL_ARR"])}
-            ${createField("Lot étude", data["LOT_ETUDE_ARR"])}
-            ${createField("Hauteur", data["HAUTEUR_ARR"])}
-            ${createField("Couple", data["COUPLE_ARR"])}
-            ${createField("Distance/Axe", data["DIST_AXE_ARR"])}
-            ${createField("Type appareil", data["TYPE_APP_ARR"])}
-            ${createField("Désignation", data["DESIG_APP_ARR"])}
-            <hr>
-            <h5 class="card-title mb-3">Infos générales</h5>
-            ${createField("Fonction", data["FONCTION"])}
-            ${createField("Nb câbles en //", data["NB_CABLES_PARALLELE"])}
-            ${createField("Statut bord", data["STATUT_BORD"])}
-            ${createField("Plan", data["PLAN"])}
-            ${createField("Date besoin", data["DATE_BESOIN"])}
-            ${createField("Longueur coupée", data["LONGUEUR_COUP"])}
+            ${sections.map(s => renderSection(s.title, s.fields, data)).join("")}
           </div>
         </div>
       `;
