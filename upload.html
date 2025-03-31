@@ -16,7 +16,7 @@
 
   <script>
     let db;
-    const request = indexedDB.open("CablesDB", 1);
+const request = indexedDB.open("CablesDB", 2); // ← version augmentée
 
     request.onupgradeneeded = function(event) {
       db = event.target.result;
