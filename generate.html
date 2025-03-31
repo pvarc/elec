@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Générer cables-min.json</title>
+  <title>Mettre à jour le site - Générer et uploader cables-min.json</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
@@ -24,7 +24,10 @@
   </nav>
 
   <div class="container">
-    <h1 class="mb-4">🛠 Générer <code>cables-min.json</code> depuis un fichier NEC (.xlsb)</h1>
+    <h1 class="mb-3">🔄 Mettre à jour le site à partir d’un fichier NEC (.xlsb)</h1>
+    <p>Cette page permet de générer le fichier <code>cables-min.json</code> et de le publier automatiquement sur GitHub pour mettre à jour les données du site.</p>
+
+    <p class="text-muted" id="lastUpdateInfo">📁 Chargement de la dernière mise à jour...</p>
 
     <input type="file" id="upload" accept=".xlsb" class="form-control mb-3">
     <div id="message"></div>
@@ -40,10 +43,34 @@
       "APO", "LOCAL_APO", "LOT_MTG_APO"
     ];
 
+    const GITHUB_TOKEN = "TON_TOKEN_ICI";
+    const GITHUB_OWNER = "pvarc";
+    const GITHUB_REPO = "elec";
+    const GITHUB_PATH = "cables-min.json";
+    const GITHUB_BRANCH = "main";
+
     let jsonMin = null;
 
     document.getElementById("upload").addEventListener("change", handleFile);
     document.getElementById("uploadBtn").addEventListener("click", uploadToGitHub);
+
+    async function getLastUpdateDate() {
+      try {
+        const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits?path=${GITHUB_PATH}`);
+        const data = await res.json();
+        if (data.length > 0) {
+          const date = new Date(data[0].commit.committer.date);
+          const formatted = date.toLocaleString("fr-FR");
+          document.getElementById("lastUpdateInfo").textContent = `📁 Dernière mise à jour GitHub : ${formatted}`;
+        } else {
+          document.getElementById("lastUpdateInfo").textContent = "Aucune mise à jour trouvée.";
+        }
+      } catch {
+        document.getElementById("lastUpdateInfo").textContent = "⚠️ Impossible de charger la date de mise à jour.";
+      }
+    }
+
+    getLastUpdateDate();
 
     function handleFile(e) {
       const file = e.target.files[0];
@@ -91,18 +118,13 @@
     async function uploadToGitHub() {
       if (!jsonMin) return;
 
-      const GITHUB_TOKEN = "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"; // Faut que je trouve un moyen de securiser ça haha
-      const owner = "pvarc";
-      const repo = "elec";
-      const path = "cables-min.json";
-      const branch = "main";
+      showMsg("⏳ Envoi en cours vers GitHub...", "info");
 
       const content = btoa(unescape(encodeURIComponent(JSON.stringify(jsonMin, null, 2))));
 
-      // Vérifier si le fichier existe pour récupérer son SHA
       let sha = null;
       try {
-        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
+        const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}`, {
           headers: { Authorization: `token ${GITHUB_TOKEN}` }
         });
         if (res.ok) {
@@ -110,17 +132,17 @@
           sha = data.sha;
         }
       } catch (err) {
-        console.warn("Fichier non trouvé (création nouvelle).");
+        console.warn("Fichier non trouvé, sera créé.");
       }
 
       const body = {
         message: "🔄 Mise à jour automatique de cables-min.json",
         content: content,
-        branch: branch
+        branch: GITHUB_BRANCH
       };
       if (sha) body.sha = sha;
 
-      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
+      const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}`, {
         method: "PUT",
         headers: {
           Authorization: `token ${GITHUB_TOKEN}`,
@@ -130,10 +152,13 @@
       });
 
       if (res.ok) {
-        showMsg("✅ Fichier mis à jour sur GitHub !", "success");
+        const result = await res.json();
+        showMsg(`✅ Fichier mis à jour sur GitHub ! <br><a href="${result.content.html_url}" target="_blank">📄 Voir sur GitHub</a>`, "success");
+        getLastUpdateDate(); // mettre à jour l'info en haut
       } else {
-        showMsg("❌ Échec de l'upload sur GitHub", "danger");
-        console.error(await res.json());
+        const err = await res.json();
+        showMsg(`❌ Échec de l'upload : ${err.message || "Erreur inconnue"}`, "danger");
+        console.error(err);
       }
     }
   </script>
