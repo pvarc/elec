@@ -5,18 +5,33 @@
   <title>Uploader Fichier XLSB</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    #progressContainer {
+      display: none;
+      margin-bottom: 1rem;
+    }
+  </style>
 </head>
 <body class="p-4 bg-light">
   <div class="container">
     <h1 class="mb-4">Mettre à jour la base de données</h1>
     <a href="index.html" class="btn btn-secondary mb-3">🔙 Retour aux données</a>
     <input type="file" id="upload" accept=".xlsb" class="form-control mb-3">
+
+    <!-- Barre de progression -->
+    <div id="progressContainer">
+      <div class="progress">
+        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
+             role="progressbar" style="width: 0%">0%</div>
+      </div>
+    </div>
+
     <div id="message"></div>
   </div>
 
   <script>
     let db;
-const request = indexedDB.open("CablesDB", 2); // ← version augmentée
+    const request = indexedDB.open("CablesDB", 2);
 
     request.onupgradeneeded = function(event) {
       db = event.target.result;
@@ -33,12 +48,10 @@ const request = indexedDB.open("CablesDB", 2); // ← version augmentée
 
     function handleFile(e) {
       const file = e.target.files[0];
-      if (!file) {
-        showMessage("Aucun fichier sélectionné.", "danger");
-        return;
-      }
+      if (!file) return;
 
-      showMessage(`📄 Fichier sélectionné : <strong>${file.name}</strong>`, "info");
+      // Démarrer la barre de progression simulée
+      startFakeProgress();
 
       const reader = new FileReader();
       reader.onload = function(e) {
@@ -48,7 +61,8 @@ const request = indexedDB.open("CablesDB", 2); // ← version augmentée
 
           const sheetName = workbook.SheetNames.find(n => n.toLowerCase().includes("cables"));
           if (!sheetName) {
-            showMessage("❌ Feuille contenant 'Cables' non trouvée dans le fichier.", "danger");
+            showMessage("❌ Feuille contenant 'Cables' non trouvée.", "danger");
+            stopProgressBar();
             return;
           }
 
@@ -56,26 +70,62 @@ const request = indexedDB.open("CablesDB", 2); // ← version augmentée
           const jsonData = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
 
           if (jsonData.length === 0) {
-            showMessage("❌ Feuille 'Cables' trouvée mais elle est vide.", "warning");
+            showMessage("❌ Feuille 'Cables' trouvée mais vide.", "warning");
+            stopProgressBar();
             return;
           }
 
-          // Enregistrer dans IndexedDB
           const tx = db.transaction("cables", "readwrite");
           const store = tx.objectStore("cables");
           store.clear().onsuccess = () => {
             jsonData.forEach(row => store.add(row));
             tx.oncomplete = () => {
-              showMessage(`✅ Données importées depuis <strong>${sheetName}</strong> (${jsonData.length} lignes).<br><a href="index.html" class="btn btn-success mt-2">Voir les données</a>`, "success");
+              updateProgressBar(100);
+              setTimeout(() => {
+                showMessage(`✅ Données importées (${jsonData.length} lignes).<br><a href="index.html" class="btn btn-success mt-2">Voir les données</a>`, "success");
+                stopProgressBar();
+              }, 500);
             };
           };
         } catch (err) {
-          console.error("Erreur de lecture du fichier :", err);
-          showMessage("❌ Erreur lors de la lecture du fichier.", "danger");
+          console.error("Erreur lecture fichier :", err);
+          showMessage("❌ Erreur de lecture du fichier.", "danger");
+          stopProgressBar();
         }
       };
 
       reader.readAsArrayBuffer(file);
+    }
+
+    function startFakeProgress() {
+      const container = document.getElementById("progressContainer");
+      const bar = document.getElementById("progressBar");
+      container.style.display = "block";
+      bar.style.width = "0%";
+      bar.innerText = "0%";
+
+      let progress = 0;
+      const interval = setInterval(() => {
+        if (progress < 90) {
+          progress += Math.random() * 10;
+          updateProgressBar(progress);
+        } else {
+          clearInterval(interval);
+        }
+      }, 300);
+    }
+
+    function updateProgressBar(value) {
+      const bar = document.getElementById("progressBar");
+      const val = Math.min(100, Math.round(value));
+      bar.style.width = `${val}%`;
+      bar.innerText = `${val}%`;
+    }
+
+    function stopProgressBar() {
+      setTimeout(() => {
+        document.getElementById("progressContainer").style.display = "none";
+      }, 1000);
     }
 
     function showMessage(text, type = "info") {
