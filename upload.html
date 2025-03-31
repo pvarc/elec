@@ -33,38 +33,53 @@
 
     function handleFile(e) {
       const file = e.target.files[0];
+      if (!file) {
+        showMessage("Aucun fichier sélectionné.", "danger");
+        return;
+      }
+
+      showMessage(`📄 Fichier sélectionné : <strong>${file.name}</strong>`, "info");
+
       const reader = new FileReader();
-
       reader.onload = function(e) {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, {type: 'array'});
-        const sheetName = workbook.SheetNames.find(n => n.toLowerCase().includes("cables"));
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, {type: 'array'});
 
-        if (!sheetName) {
-          document.getElementById("message").innerHTML = `<div class="alert alert-danger">Feuille 'Cables' non trouvée.</div>`;
-          return;
-        }
+          const sheetName = workbook.SheetNames.find(n => n.toLowerCase().includes("cables"));
+          if (!sheetName) {
+            showMessage("❌ Feuille contenant 'Cables' non trouvée dans le fichier.", "danger");
+            return;
+          }
 
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
 
-        const tx = db.transaction("cables", "readwrite");
-        const store = tx.objectStore("cables");
-        const clearReq = store.clear();
+          if (jsonData.length === 0) {
+            showMessage("❌ Feuille 'Cables' trouvée mais elle est vide.", "warning");
+            return;
+          }
 
-        clearReq.onsuccess = () => {
-          jsonData.forEach(row => store.add(row));
-          tx.oncomplete = () => {
-            document.getElementById("message").innerHTML = `
-              <div class="alert alert-success">
-                ✅ Données mises à jour avec succès (${jsonData.length} lignes).
-                <a href="index.html" class="btn btn-sm btn-success ms-3">Voir les données</a>
-              </div>`;
+          // Enregistrer dans IndexedDB
+          const tx = db.transaction("cables", "readwrite");
+          const store = tx.objectStore("cables");
+          store.clear().onsuccess = () => {
+            jsonData.forEach(row => store.add(row));
+            tx.oncomplete = () => {
+              showMessage(`✅ Données importées depuis <strong>${sheetName}</strong> (${jsonData.length} lignes).<br><a href="index.html" class="btn btn-success mt-2">Voir les données</a>`, "success");
+            };
           };
-        };
+        } catch (err) {
+          console.error("Erreur de lecture du fichier :", err);
+          showMessage("❌ Erreur lors de la lecture du fichier.", "danger");
+        }
       };
 
       reader.readAsArrayBuffer(file);
+    }
+
+    function showMessage(text, type = "info") {
+      document.getElementById("message").innerHTML = `<div class="alert alert-${type}">${text}</div>`;
     }
   </script>
 </body>
