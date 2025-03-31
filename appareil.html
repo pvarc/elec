@@ -32,17 +32,23 @@
     let db;
     let cablesData = [];
 
-const request = indexedDB.open("CablesDB", 2); // ou 1 si tu veux
+    const request = indexedDB.open("CablesDB", 2);
 
-request.onupgradeneeded = function(event) {
-  db = event.target.result;
-  if (!db.objectStoreNames.contains("cables")) {
-    db.createObjectStore("cables", { keyPath: "id", autoIncrement: true });
-  }
-};
-
-    request.onsuccess = function(event) {
+    request.onupgradeneeded = function (event) {
       db = event.target.result;
+      if (!db.objectStoreNames.contains("cables")) {
+        db.createObjectStore("cables", { keyPath: "id", autoIncrement: true });
+      }
+    };
+
+    request.onsuccess = function (event) {
+      db = event.target.result;
+
+      if (!db.objectStoreNames.contains("cables")) {
+        loadFromJSON();
+        return;
+      }
+
       const tx = db.transaction("cables", "readonly");
       const store = tx.objectStore("cables");
       const req = store.getAll();
@@ -51,17 +57,21 @@ request.onupgradeneeded = function(event) {
         if (req.result.length > 0) {
           cablesData = req.result;
         } else {
-          fetch("cables-min.json")
-            .then(res => res.json())
-            .then(data => cablesData = data)
-            .catch(() => showMessage("❌ Impossible de charger les données", "danger"));
+          loadFromJSON();
         }
       };
     };
 
+    function loadFromJSON() {
+      fetch("cables-min.json")
+        .then(res => res.json())
+        .then(data => cablesData = data)
+        .catch(() => showMessage("❌ Impossible de charger les données", "danger"));
+    }
+
     function searchAppareil() {
       const input = document.getElementById("appareilInput").value.trim().toUpperCase();
-      const matches = cablesData.filter(row => 
+      const matches = cablesData.filter(row =>
         String(row.APA || "").toUpperCase() === input ||
         String(row.APO || "").toUpperCase() === input
       );
