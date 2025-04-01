@@ -38,7 +38,6 @@
       Ensuite, on recherche pour chacun la liste des câbles, leur GAM et leur statut.
     </p>
 
-    <!-- Indicateur de base -->
     <p id="baseIndicator" class="text-muted">Base : inconnue</p>
 
     <!-- 1) Chargement d'un nouveau fichier XLSB (optionnel) -->
@@ -49,9 +48,7 @@
 
     <!-- 2) Champ multi-appareils -->
     <div class="mb-3">
-      <label for="appareilsInput" class="form-label">
-        Appareils (ex: "VEDDH603C1 TR1234; STT701"):
-      </label>
+      <label for="appareilsInput" class="form-label">Appareils (ex: "VEDDH603C1 TR1234; STT701"): </label>
       <textarea id="appareilsInput" rows="2" class="form-control"></textarea>
     </div>
 
@@ -59,23 +56,28 @@
     <button class="btn btn-primary mb-3" id="btnSearch">Rechercher</button>
     <button class="btn btn-success mb-3 ms-2" id="btnExportAll">Exporter tout en Excel</button>
     <button class="btn btn-warning mb-3 ms-2" id="btnExportNonTires">Exporter câbles non tirés</button>
+    <!-- Nouveau bouton -->
     <button class="btn btn-info mb-3 ms-2" id="btnExportOkAppareils">
       Exporter appareils (tous câbles = T)
     </button>
 
     <!-- Zone d'affichage des tableaux -->
     <div id="resultsArea"></div>
+
   </div>
 
   <script>
-    let cables = [];    // Contient {CBL, APA, APO, GAM, STT_CBL_BORD, LOCAL_APA, LOT_MTG_APA, LOCAL_APO, LOT_MTG_APO,...}
-    let globalResults = []; // Contient le résultat final (pour export) : {Appareil, Câble, GAM, Statut, Local, Lot}
+    let cables = [];
+    let globalResults = [];
 
+    // ✅ On ajoute ces colonnes, y compris celles pour local & lot (APA/APO)
     const columnsOfInterest = [
       "APA", "APO", "GAM", "STT_CBL_BORD",
       "LOCAL_APA", "LOT_MTG_APA",
       "LOCAL_APO", "LOT_MTG_APO"
     ];
+    // + "CBL" implicite
+
     let currentBase = "inconnue";
 
     window.addEventListener("load", init);
@@ -85,23 +87,29 @@
       document.getElementById("btnSearch").addEventListener("click", searchMultiAppareils);
       document.getElementById("btnExportAll").addEventListener("click", () => exportToExcel(false));
       document.getElementById("btnExportNonTires").addEventListener("click", () => exportToExcel(true));
-      document.getElementById("btnExportOkAppareils").addEventListener("click", exportOkAppareils);
+
+      // Nouveau bouton
+      document.getElementById("btnExportOkAppareils")
+              .addEventListener("click", exportOkAppareils);
 
       loadFromJSON();
     }
 
+    // -----------------------------------------------------------
+    // Indicateur de base
     function updateBaseIndicator() {
       document.getElementById("baseIndicator").textContent = `Base : ${currentBase}`;
     }
 
-    // ---------------------------------------
-    // 1) Charger JSON par défaut
+    // -----------------------------------------------------------
+    // 1) Charger JSON par défaut si pas de XLSB
     async function loadFromJSON() {
       currentBase = "JSON par défaut";
       updateBaseIndicator();
 
       let merged = {};
       for (const col of columnsOfInterest) {
+        // Essaye de charger cables_<col>.json
         try {
           const url = `json/cables_${col}.json`;
           const resp = await fetch(url);
@@ -119,8 +127,8 @@
       cables = Object.values(merged);
     }
 
-    // ---------------------------------------
-    // 2) Charger un XLSB
+    // -----------------------------------------------------------
+    // 2) Charger un XLSB manuellement
     function handleFileXLSB(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -148,6 +156,7 @@
         raw.forEach(row => {
           const cbl = row["CBL"] || "";
           if (!merged[cbl]) merged[cbl] = { CBL: cbl };
+
           columnsOfInterest.forEach(col => {
             merged[cbl][col] = row[col] || "";
           });
@@ -164,13 +173,12 @@
       }
     }
 
-    // ---------------------------------------
+    // -----------------------------------------------------------
     // 3) Recherche multi-appareils
     function searchMultiAppareils() {
       const input = document.getElementById("appareilsInput").value.trim();
       if (!input) return;
 
-      // Séparer par espace, virgule, point-virgule
       const appareils = input.split(/[\s,;]+/)
                             .filter(Boolean)
                             .map(a => a.toUpperCase());
@@ -178,42 +186,25 @@
       const resultsArea = document.getElementById("resultsArea");
       resultsArea.innerHTML = "";
 
-      globalResults = []; // On réinitialise
+      globalResults = [];
 
       appareils.forEach(app => {
         const found = cables.filter(c => {
-          const apa = (c.APA || "").toUpperCase();
-          const apo = (c.APO || "").toUpperCase();
+          const apa = String(c.APA || "").toUpperCase();
+          const apo = String(c.APO || "").toUpperCase();
           return (apa === app || apo === app);
         });
 
-        // Construire un tableau HTML
         const tableHTML = buildTableForApp(app, found);
         resultsArea.innerHTML += tableHTML;
 
-        // Stocker dans globalResults
+        // Stocke dans globalResults
         found.forEach(c => {
-          // Déterminer le local & lot correspondant à "app"
-          let local = "";
-          let lot   = "";
-          const apa = (c.APA || "").toUpperCase();
-          if (apa === app) {
-            local = c.LOCAL_APA || "";
-            lot   = c.LOT_MTG_APA || "";
-          }
-          const apo = (c.APO || "").toUpperCase();
-          if (apo === app) {
-            local = c.LOCAL_APO || "";
-            lot   = c.LOT_MTG_APO || "";
-          }
-
           globalResults.push({
             Appareil: app,
             Câble: c.CBL,
             GAM: c.GAM || "",
-            Statut: c.STT_CBL_BORD || "",
-            Local: local,
-            Lot: lot
+            Statut: c.STT_CBL_BORD || ""
           });
         });
       });
@@ -226,6 +217,7 @@
                   Aucun câble trouvé pour cet appareil.
                 </div>`;
       }
+
       let html = `<div class="appareil-table">`;
       html += `<h4>Appareil "${appareil}" - ${arrCables.length} câble(s) :</h4>`;
       html += `
@@ -254,22 +246,22 @@
       return html;
     }
 
-    // ---------------------------------------
-    // 4) Export en Excel
+    // -----------------------------------------------------------
+    // 4) Export en Excel (tout ou non tirés)
     function exportToExcel(onlyNonTires) {
-      // "Appareil", "Câble", "GAM", "Statut", "Local", "Lot"
       let dataToExport = globalResults;
       if (onlyNonTires) {
-        dataToExport = dataToExport.filter(r => r.Statut.toUpperCase() !== "T");
+        dataToExport = globalResults.filter(r =>
+          (r.Statut || "").toUpperCase() !== "T"
+        );
       }
       if (!dataToExport.length) {
         alert("Aucune donnée à exporter.");
         return;
       }
-      // On garde l'ordre des colonnes
-      const ws = XLSX.utils.json_to_sheet(dataToExport, {
-        header: ["Appareil", "Câble", "GAM", "Statut", "Local", "Lot"]
-      });
+      const ws = XLSX.utils.json_to_sheet(dataToExport,
+        { header: ["Appareil", "Câble", "GAM", "Statut"] }
+      );
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Export");
 
@@ -277,56 +269,76 @@
       XLSX.writeFile(wb, fileName);
     }
 
-    // ---------------------------------------
-    // 5) Export appareils dont TOUS les câbles = T, parmi ceux recherchés
+    // -----------------------------------------------------------
+    // 5) Export liste d'appareils pour lesquels "tous câbles = T"
+    //    => on groupe par appareil, si un seul câble n'est pas T, on exclut
+    //    => on récupère local & lot
     function exportOkAppareils() {
-      // On ne regarde que globalResults (les câbles des appareils cherchés)
-      // On regroupe par "Appareil"
-      // si un seul statut != T -> exclu
-      // on joint local/lot (set)
-      // on indique "SGDTEL_OK" = "OK"
-
+      // 1. Construire un map : device => { device, localSet, lotSet, allT }
       let deviceMap = {};
-      globalResults.forEach(row => {
-        const dev = row.Appareil;
-        if (!deviceMap[dev]) {
-          deviceMap[dev] = {
-            device: dev,
-            localSet: new Set(),
-            lotSet: new Set(),
-            allT: true
-          };
-        }
-        // Ajouter local/lot
-        if (row.Local) deviceMap[dev].localSet.add(row.Local);
-        if (row.Lot)   deviceMap[dev].lotSet.add(row.Lot);
 
-        // si statut != T => allT = false
-        if ((row.Statut || "").toUpperCase() !== "T") {
-          deviceMap[dev].allT = false;
+      cables.forEach(c => {
+        const stt = (c.STT_CBL_BORD || "").toUpperCase();
+        // Pour c.APA
+        const apa = String(c.APA || "").toUpperCase();
+        if (apa) {
+          if (!deviceMap[apa]) {
+            deviceMap[apa] = {
+              device: apa,
+              localSet: new Set(),
+              lotSet: new Set(),
+              allT: true
+            };
+          }
+          // Récupérer local & lot si existants
+          if (c.LOCAL_APA) deviceMap[apa].localSet.add(c.LOCAL_APA);
+          if (c.LOT_MTG_APA) deviceMap[apa].lotSet.add(c.LOT_MTG_APA);
+
+          if (stt !== "T") {
+            deviceMap[apa].allT = false;
+          }
+        }
+        // Pour c.APO
+        const apo = String(c.APO || "").toUpperCase();
+        if (apo) {
+          if (!deviceMap[apo]) {
+            deviceMap[apo] = {
+              device: apo,
+              localSet: new Set(),
+              lotSet: new Set(),
+              allT: true
+            };
+          }
+          if (c.LOCAL_APO) deviceMap[apo].localSet.add(c.LOCAL_APO);
+          if (c.LOT_MTG_APO) deviceMap[apo].lotSet.add(c.LOT_MTG_APO);
+
+          if (stt !== "T") {
+            deviceMap[apo].allT = false;
+          }
         }
       });
 
-      // Filtrer
+      // 2. On ne garde que ceux pour qui allT = true
       let finalArr = Object.values(deviceMap)
         .filter(d => d.allT)
         .map(d => {
           return {
             Appareil: d.device,
-            Local: Array.from(d.localSet).join(", "),
-            Lot: Array.from(d.lotSet).join(", "),
+            Local: Array.from(d.localSet).join(", ") || "",
+            Lot: Array.from(d.lotSet).join(", ") || "",
             SGDTEL_OK: "OK"
           };
         });
 
       if (!finalArr.length) {
-        alert("Aucun appareil (parmi ceux recherchés) n'a tous ses câbles au statut T.");
+        alert("Aucun appareil n'a tous ses câbles au statut T.");
         return;
       }
 
-      const ws = XLSX.utils.json_to_sheet(finalArr, {
-        header: ["Appareil", "Local", "Lot", "SGDTEL_OK"]
-      });
+      // 3. Exporter en Excel
+      const ws = XLSX.utils.json_to_sheet(finalArr,
+        { header: ["Appareil", "Local", "Lot", "SGDTEL_OK"] }
+      );
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Appareils_OK");
 
