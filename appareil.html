@@ -2,11 +2,28 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Recherche Appareil</title>
+  <title>📡 Rechercher un appareil (Autocomplétion)</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    /* Suggestions box */
+    #suggestions {
+      position: absolute;
+      z-index: 1000;
+      width: 100%;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 0 0 4px 4px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    #suggestions .list-group-item {
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body class="p-4 bg-light">
-<body class="p-4 bg-light">
+
+  <!-- Navbar -->
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
     <div class="container-fluid">
       <a class="navbar-brand" href="index.html">📊 Câbles Viewer</a>
@@ -16,96 +33,137 @@
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav">
           <li class="nav-item"><a class="nav-link" href="index.html">🔍 Rechercher Câble</a></li>
-          <li class="nav-item"><a class="nav-link" href="appareil.html">📡 Rechercher Appareil</a></li>
+          <li class="nav-item"><a class="nav-link active" href="appareil.html">📡 Rechercher Appareil</a></li>
           <li class="nav-item"><a class="nav-link" href="generate.html">🛠 Générer JSON</a></li>
         </ul>
       </div>
     </div>
   </nav>
 
-  <div class="container">
-    <h1>📡 Rechercher un appareil</h1>
-    <div class="input-group mb-4">
-      <input type="text" id="appareilInput" class="form-control" placeholder="Nom de l'appareil">
-      <button class="btn btn-primary" onclick="searchAppareil()">Rechercher</button>
+  <div class="container position-relative">
+    <h1 class="mb-4">📡 Rechercher un appareil (autocomplétion)</h1>
+
+    <div class="input-group mb-3">
+      <input type="text" id="apInput" class="form-control" placeholder="Ex: VEDDH603C1">
+      <button class="btn btn-primary" id="searchBtn">Rechercher</button>
     </div>
-    <div id="resultArea"></div>
+
+    <!-- Zone pour suggestions -->
+    <div id="suggestions" class="list-group"></div>
+
+    <div id="result" class="mt-4"></div>
   </div>
 
   <script>
-    let db;
-    let cablesData = [];
+    const colonnes = [
+      "GAM", "STT_CBL_BORD", "RESP_TIRAGE", "LOT_MTG_APO", "APA",
+      "LOT_MTG_APA", "PT_CBL", "COD_PLAN", "LOCAL_APO", "LOCAL_APA"
+    ];
+    let cables = [];
+    let allApps = []; // Stocker la liste unique de tous APA et APO
 
-    const request = indexedDB.open("CablesDB", 2);
+    document.getElementById("searchBtn").addEventListener("click", searchAppareil);
+    document.getElementById("apInput").addEventListener("input", showSuggestions);
+    document.getElementById("apInput").addEventListener("keydown", handleKeyDown);
 
-    request.onupgradeneeded = function (event) {
-      db = event.target.result;
-      if (!db.objectStoreNames.contains("cables")) {
-        db.createObjectStore("cables", { keyPath: "id", autoIncrement: true });
+    async function loadAllData() {
+      let merged = {};
+      for (const col of colonnes) {
+        const res = await fetch(`json/cables_${col}.json`);
+        const rows = await res.json();
+        rows.forEach(row => {
+          const id = row.CBL;
+          if (!merged[id]) merged[id] = { CBL: id };
+          merged[id][col] = row[col];
+        });
       }
-    };
+      cables = Object.values(merged);
 
-    request.onsuccess = function (event) {
-      db = event.target.result;
-
-      if (!db.objectStoreNames.contains("cables")) {
-        loadFromJSON();
-        return;
-      }
-
-      const tx = db.transaction("cables", "readonly");
-      const store = tx.objectStore("cables");
-      const req = store.getAll();
-
-      req.onsuccess = () => {
-        if (req.result.length > 0) {
-          cablesData = req.result;
-        } else {
-          loadFromJSON();
-        }
-      };
-    };
-
-    function loadFromJSON() {
-      fetch("cables-min.json")
-        .then(res => res.json())
-        .then(data => cablesData = data)
-        .catch(() => showMessage("❌ Impossible de charger les données", "danger"));
+      // Construire la liste des appareils distincts
+      let appsSet = new Set();
+      cables.forEach(c => {
+        if (c.APA) appsSet.add(c.APA.toUpperCase());
+        if (c.APO) appsSet.add(c.APO.toUpperCase());
+      });
+      allApps = Array.from(appsSet);
     }
 
     function searchAppareil() {
-      const input = document.getElementById("appareilInput").value.trim().toUpperCase();
-      const matches = cablesData.filter(row =>
-        String(row.APA || "").toUpperCase() === input ||
-        String(row.APO || "").toUpperCase() === input
+      const ap = document.getElementById("apInput").value.trim().toUpperCase();
+      if (!ap) return;
+      hideSuggestions();
+      const found = cables.filter(c =>
+        (c.APA && c.APA.toUpperCase() === ap) ||
+        (c.APO && c.APO.toUpperCase() === ap)
       );
-
-      if (!matches.length) return showMessage("Aucun câble trouvé.", "warning");
-
-      const rows = matches.map(row => {
-        const direction = String(row.APA || "").toUpperCase() === input ? "Arrivée" : "Départ";
-        return `
-          <tr>
-            <td>${row.CBL}</td>
-            <td>${direction}</td>
-            <td>${row.STT_CBL_BORD || "-"}</td>
-            <td>${row.PT_CBL || "-"}</td>
-            <td>${direction === "Arrivée" ? row.LOT_MTG_APA : row.LOT_MTG_APO || "-"}</td>
-            <td>${direction === "Arrivée" ? row.LOCAL_APA : row.LOCAL_APO || "-"}</td>
-          </tr>`;
-      }).join("");
-
-      document.getElementById("resultArea").innerHTML = `
-        <table class="table table-bordered">
-          <thead><tr><th>CBL</th><th>Direction</th><th>Statut</th><th>Type</th><th>Lot</th><th>Local</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>`;
+      renderResults(found, ap);
     }
 
-    function showMessage(msg, type) {
-      document.getElementById("resultArea").innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+    function renderResults(found, ap) {
+      const resultDiv = document.getElementById("result");
+      if (found.length === 0) {
+        resultDiv.innerHTML = `<div class="alert alert-warning">Aucun câble lié à l'appareil "${ap}".</div>`;
+        return;
+      }
+
+      let html = `<h4>${found.length} câble(s) pour "${ap}" :</h4>`;
+      found.forEach(cable => {
+        html += `<div class="card mb-2"><div class="card-body">
+                  <h5 class="card-title">${cable.CBL}</h5>
+                  <ul class="list-unstyled">`;
+        for (const key of colonnes) {
+          html += `<li><strong>${key}:</strong> ${cable[key] || "-"}</li>`;
+        }
+        html += `</ul></div></div>`;
+      });
+      resultDiv.innerHTML = html;
     }
+
+    // Autocomplétion
+    function showSuggestions() {
+      const input = document.getElementById("apInput").value.trim().toUpperCase();
+      const sugDiv = document.getElementById("suggestions");
+      sugDiv.innerHTML = "";
+      if (!input) {
+        hideSuggestions();
+        return;
+      }
+
+      const matches = allApps.filter(a => a.startsWith(input)).slice(0, 15);
+      if (matches.length === 0) {
+        hideSuggestions();
+        return;
+      }
+
+      matches.forEach(app => {
+        const item = document.createElement("div");
+        item.className = "list-group-item list-group-item-action";
+        item.textContent = app;
+        item.addEventListener("click", () => {
+          document.getElementById("apInput").value = app;
+          hideSuggestions();
+          searchAppareil();
+        });
+        sugDiv.appendChild(item);
+      });
+      sugDiv.style.display = "block";
+    }
+
+    function hideSuggestions() {
+      document.getElementById("suggestions").innerHTML = "";
+      document.getElementById("suggestions").style.display = "none";
+    }
+
+    function handleKeyDown(e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        searchAppareil();
+      }
+    }
+
+    loadAllData();
   </script>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
