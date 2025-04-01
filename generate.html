@@ -2,223 +2,157 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Générer et Uploader cables-min.json</title>
+  <title>Générer 1 JSON par colonne</title>
+  <!-- SheetJS pour lire le .xlsb -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="p-4 bg-light">
+
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
     <div class="container-fluid">
-      <a class="navbar-brand" href="index.html">📊 Câbles Viewer</a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse" id="navbarNav">
-        <ul class="navbar-nav">
-          <li class="nav-item"><a class="nav-link" href="index.html">🔍 Rechercher Câble</a></li>
-          <li class="nav-item"><a class="nav-link" href="appareil.html">📡 Rechercher Appareil</a></li>
-          <li class="nav-item"><a class="nav-link active" href="generate.html">🛠 Générer JSON</a></li>
-        </ul>
-      </div>
+      <a class="navbar-brand" href="#">📊 Split XLSB → Multiples JSON</a>
     </div>
   </nav>
 
   <div class="container">
-    <h1 class="mb-3">🔄 Générer et uploader <code>cables-min.json</code></h1>
+    <h1 class="mb-3">Générer plusieurs fichiers JSON à partir du NEC</h1>
     <p>
-      Cette page permet de récupérer le fichier NEC <code>.xlsb</code> 
-      soit par URL, soit depuis un fichier local, 
-      puis de générer le <code>cables-min.json</code> 
-      et enfin de l’envoyer automatiquement sur GitHub.
+      Cette page va lire la feuille <code>"Cables"</code> de ton fichier <code>.xlsb</code>, et produire
+      un fichier JSON par colonne d’intérêt.<br>
+      Chaque JSON contient <code>CBL</code> + la colonne ciblée.
     </p>
 
-    <!-- Bouton pour charger depuis URL -->
-    <button class="btn btn-secondary mb-3" id="btnLoadUrl">
-      Charger depuis URL
-    </button>
+    <!-- (Optionnel) Bouton pour charger depuis un URL si tu veux -->
+    <!-- <button class="btn btn-secondary mb-3" id="btnLoadUrl">Charger depuis URL</button> -->
+
     <!-- Input file pour charger localement -->
-    <input type="file" id="fileInput" accept=".xlsb" class="form-control mb-3" />
+    <input type="file" id="fileInput" accept=".xlsb" class="form-control mb-3">
 
     <div id="message"></div>
 
-    <!-- Bouton pour télécharger le cables-min.json généré -->
-    <a id="downloadLink" class="btn btn-success mt-3 d-none" download="cables-min.json">
-      📥 Télécharger cables-min.json
-    </a>
-
-    <!-- Bouton pour Uploader sur GitHub -->
-    <button id="uploadBtn" class="btn btn-outline-primary mt-3 ms-2 d-none">
-      📤 Uploader vers GitHub
-    </button>
+    <div id="downloadLinks" class="mt-4"></div>
   </div>
 
   <script>
-    // Lien vers ton fichier .xlsb
-    const XLSB_URL = "https://share.chantiers-atlantique.com/share/proxy/alfresco/slingshot/node/content/workspace/SpacesStore/08213d03-1f34-4cb6-b1c8-ac94778059b8/Extraction_NEC_N34.xlsb?a=true";
+    // URL possible (si tu veux charger depuis un lien direct)
+    // const XLSB_URL = "https://share.chantiers-atlantique.com/.../Extraction_NEC_N34.xlsb?a=true";
 
-    // Colonnes qu'on veut garder dans cables-min.json
-    const colonnesUtile = [
-      "CBL", "NAV", "STT_CBL_BORD", "PT_CBL",
-      "APA", "LOCAL_APA", "LOT_MTG_APA",
-      "APO", "LOCAL_APO", "LOT_MTG_APO"
+    // Les 10 colonnes d'intérêt (en plus de 'CBL')
+    const columnsOfInterest = [
+      "GAM",
+      "STT_CBL_BORD",
+      "RESP_TIRAGE",
+      "LOT_MTG_APO",
+      "APA",
+      "LOT_MTG_APA",
+      "PT_CBL",
+      "COD_PLAN",
+      "LOCAL_APO",
+      "LOCAL_APA"
     ];
 
-    // Config GitHub
-    const GITHUB_TOKEN = "TON_TOKEN_ICI";  // <-- Mets ton token GitHub ici
-    const GITHUB_OWNER = "pvarc";
-    const GITHUB_REPO = "elec";
-    const GITHUB_PATH = "cables-min.json";
-    const GITHUB_BRANCH = "main";
-
-    let jsonMin = null; // On stockera ici le résultat final
-
-    document.getElementById("btnLoadUrl").addEventListener("click", loadFromUrl);
     document.getElementById("fileInput").addEventListener("change", handleFile);
-    document.getElementById("uploadBtn").addEventListener("click", uploadToGitHub);
 
-    // --- 1) Charger depuis URL ---
+    // (Optionnel) Pour charger depuis l'URL, si tu actives le bouton
+    // document.getElementById("btnLoadUrl").addEventListener("click", loadFromUrl);
 
-    async function loadFromUrl() {
-      showMsg("⏳ Chargement du fichier .xlsb depuis l’URL…", "info");
-      try {
-        const resp = await fetch(XLSB_URL);
-        if (!resp.ok) {
-          throw new Error("Erreur HTTP " + resp.status);
-        }
-        const buffer = await resp.arrayBuffer();
-        parseXlsb(buffer);
-      } catch (err) {
-        console.error(err);
-        showMsg("❌ Erreur lors du chargement depuis l’URL : " + err.message, "danger");
-      }
-    }
-
-    // --- 2) Charger depuis un fichier local ---
-
+    // --- 1) Charger un fichier local ---
     function handleFile(e) {
       const file = e.target.files[0];
       if (!file) return;
+
       showMsg("⏳ Lecture du fichier local...", "info");
 
       const reader = new FileReader();
-      reader.onload = (evt) => {
+      reader.onload = evt => {
         try {
           const buffer = new Uint8Array(evt.target.result);
-          parseXlsb(buffer);
+          parseAndSplitColumns(buffer);
         } catch (err) {
           console.error(err);
-          showMsg("❌ Erreur lors de la lecture du fichier local", "danger");
+          showMsg("❌ Erreur lecture fichier local : " + err.message, "danger");
         }
       };
       reader.readAsArrayBuffer(file);
     }
 
-    // --- 3) Parse du .xlsb en cables-min.json ---
-
-    function parseXlsb(arrayBuf) {
+    // --- 2) (Optionnel) Charger depuis URL ---
+    async function loadFromUrl() {
+      showMsg("⏳ Chargement depuis l'URL...", "info");
       try {
-        // Lire le workbook
-        const workbook = XLSX.read(arrayBuf, { type: 'array' });
-        // Trouver la feuille "Cables"
+        const resp = await fetch(XLSB_URL);
+        if (!resp.ok) {
+          throw new Error("Erreur HTTP " + resp.status);
+        }
+        const arrayBuf = await resp.arrayBuffer();
+        parseAndSplitColumns(arrayBuf);
+      } catch (err) {
+        console.error(err);
+        showMsg("❌ Erreur : " + err.message, "danger");
+      }
+    }
+
+    // --- 3) Parser le XLSB, trouver "Cables" et générer 10 JSON distincts ---
+    function parseAndSplitColumns(arrayBuf) {
+      try {
+        const workbook = XLSX.read(arrayBuf, { type: "array" });
+        // Feuille "Cables" (insensible à la casse)
         const sheetName = workbook.SheetNames.find(n => n.toLowerCase().includes("cables"));
         if (!sheetName) {
           showMsg("❌ Feuille 'Cables' non trouvée", "danger");
           return;
         }
-        // Extraire en JSON brut
+
+        // Convertir en JSON brut
         const sheet = workbook.Sheets[sheetName];
         const jsonRaw = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-        // Filtrer les colonnes
-        jsonMin = jsonRaw.map(row => {
-          const obj = {};
-          colonnesUtile.forEach(col => obj[col] = row[col] ?? "");
-          return obj;
+        // On va créer un JSON = "cables_<col>.json" pour chaque col
+        const linksContainer = document.getElementById("downloadLinks");
+        linksContainer.innerHTML = ""; // on vide d'abord
+
+        // Pour chaque colonne d'intérêt
+        columnsOfInterest.forEach(col => {
+          // On récupère un tableau "CBL" + la colonne
+          const minimalData = jsonRaw.map(row => {
+            return {
+              CBL: row["CBL"] || "",
+              [col]: row[col] || ""
+            };
+          });
+
+          // On génère un blob JSON
+          const blob = new Blob([JSON.stringify(minimalData, null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+
+          // On crée un lien de téléchargement
+          const fileName = `cables_${col}.json`;
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = fileName;
+          link.className = "btn btn-primary me-2 mb-2";
+          link.textContent = `Télécharger ${fileName}`;
+
+          // On l'ajoute à la page
+          linksContainer.appendChild(link);
         });
 
-        // Générer un Blob (pour téléchargement local)
-        const blob = new Blob([JSON.stringify(jsonMin, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-
-        const link = document.getElementById("downloadLink");
-        link.href = url;
-        link.classList.remove("d-none");
-
-        // Activer le bouton pour upload GitHub
-        document.getElementById("uploadBtn").classList.remove("d-none");
-
-        showMsg(`✅ ${jsonMin.length} lignes extraites. Fichier prêt.`, "success");
-
+        showMsg(`✅ ${jsonRaw.length} lignes chargées. Fichiers générés : ${columnsOfInterest.length}`, "success");
       } catch (err) {
         console.error(err);
-        showMsg("❌ Erreur lors du parsing XLSB : " + err.message, "danger");
+        showMsg("❌ Erreur lors du parse XLSB : " + err.message, "danger");
       }
     }
 
-    // --- 4) Uploader vers GitHub ---
-
-    async function uploadToGitHub() {
-      if (!jsonMin) {
-        showMsg("❌ Aucun JSON généré à uploader.", "danger");
-        return;
-      }
-
-      showMsg("⏳ Envoi en cours vers GitHub...", "info");
-
-      try {
-        const content = btoa(unescape(encodeURIComponent(JSON.stringify(jsonMin, null, 2))));
-        // Récupérer le sha s'il existe déjà
-        let sha = null;
-        const check = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}`, {
-          headers: { Authorization: `token ${GITHUB_TOKEN}` }
-        });
-        if (check.ok) {
-          const data = await check.json();
-          sha = data.sha;
-        }
-
-        // Construire la requête PUT
-        const body = {
-          message: "🔄 Mise à jour automatique cables-min.json",
-          content: content,
-          branch: GITHUB_BRANCH
-        };
-        if (sha) body.sha = sha;
-
-        const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}`, {
-          method: "PUT",
-          headers: {
-            Authorization: `token ${GITHUB_TOKEN}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(body)
-        });
-
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.message || "Erreur inconnue");
-        }
-
-        const result = await res.json();
-        showMsg(
-          `✅ Fichier mis à jour sur GitHub !<br>
-           <a href="${result.content.html_url}" target="_blank">📄 Voir sur GitHub</a>`,
-          "success"
-        );
-
-      } catch (err) {
-        console.error(err);
-        showMsg("❌ Échec de l'upload sur GitHub : " + err.message, "danger");
-      }
-    }
-
-    // --- Utilitaire pour afficher un message ---
+    // Simple util pour afficher un message
     function showMsg(msg, type = "info") {
-      document.getElementById("message").innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+      document.getElementById("message").innerHTML =
+        `<div class="alert alert-${type}">${msg}</div>`;
     }
   </script>
 
-  <!-- Bootstrap JS -->
+  <!-- Script Bootstrap pour la navbar responsive -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
