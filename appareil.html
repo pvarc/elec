@@ -55,34 +55,45 @@
   </div>
 
   <script>
+    // On a besoin de APA/APO, STT_CBL_BORD, GAM, ...
+    // (et éventuellement d'autres colonnes si on veut plus tard).
+    // Mais on se contentera d'extraire TOTOUT, en tout cas on fait :
     const colonnes = [
-      "GAM", "STT_CBL_BORD", "RESP_TIRAGE", "APO", "LOT_MTG_APO", "APA",
-      "LOT_MTG_APA", "PT_CBL", "COD_PLAN", "LOCAL_APO", "LOCAL_APA"
+      "APO",
+      "APA",
+      "STT_CBL_BORD",
+      "GAM"
     ];
+
     let cables = [];
-    let allApps = []; // Stocker la liste unique de tous APA et APO
+    let allApps = []; // Appareils distincts (APA + APO)
 
     document.getElementById("searchBtn").addEventListener("click", searchAppareil);
     document.getElementById("apInput").addEventListener("input", showSuggestions);
     document.getElementById("apInput").addEventListener("keydown", handleKeyDown);
 
+    // Charger toutes les données depuis /json/
     async function loadAllData() {
       let merged = {};
       for (const col of colonnes) {
-        // Charger chaque fichier JSON (cables_<col>.json)
-        const res = await fetch(`json/cables_${col}.json`);
-        const rows = await res.json();
-        rows.forEach(row => {
-          const id = row.CBL;
-          if (!merged[id]) merged[id] = { CBL: id };
-          merged[id][col] = row[col];
-        });
+        try {
+          const resp = await fetch(`json/cables_${col}.json`);
+          const rows = await resp.json();
+          rows.forEach(row => {
+            const id = row.CBL;
+            if (!merged[id]) merged[id] = { CBL: id };
+            merged[id][col] = row[col];
+          });
+        } catch (err) {
+          console.warn(`Erreur chargement cables_${col}.json`, err);
+        }
       }
+
+      // Convert merged object → array
       cables = Object.values(merged);
 
-      // Construire la liste des appareils distincts (APA et APO),
-      // en forçant la conversion en string (pour éviter les erreurs).
-      let appsSet = new Set();
+      // Construire la liste d'appareils
+      const appsSet = new Set();
       cables.forEach(c => {
         const apa = String(c.APA || "").toUpperCase();
         const apo = String(c.APO || "").toUpperCase();
@@ -97,11 +108,11 @@
       if (!ap) return;
       hideSuggestions();
 
-      // Filtrer les câbles où APA == ap ou APO == ap, en string-safe
+      // Filtrer les câbles (c.APA ou c.APO == ap)
       const found = cables.filter(c => {
         const apa = String(c.APA || "").toUpperCase();
         const apo = String(c.APO || "").toUpperCase();
-        return apa === ap || apo === ap;
+        return (apa === ap || apo === ap);
       });
 
       renderResults(found, ap);
@@ -109,21 +120,46 @@
 
     function renderResults(found, ap) {
       const resultDiv = document.getElementById("result");
+
       if (found.length === 0) {
         resultDiv.innerHTML = `<div class="alert alert-warning">Aucun câble lié à l'appareil "${ap}".</div>`;
         return;
       }
 
-      let html = `<h4>${found.length} câble(s) pour "${ap}" :</h4>`;
-      found.forEach(cable => {
-        html += `<div class="card mb-2"><div class="card-body">
-                  <h5 class="card-title">${cable.CBL}</h5>
-                  <ul class="list-unstyled">`;
-        for (const key of colonnes) {
-          html += `<li><strong>${key}:</strong> ${cable[key] || "-"}</li>`;
-        }
-        html += `</ul></div></div>`;
+      // Construisons un tableau :
+      // | Câble | STT_CBL_BORD (statut) | GAM | Direction (APA/APO) |
+      let html = `
+        <h4>${found.length} câble(s) pour "${ap}" :</h4>
+        <div class="table-responsive mt-3">
+          <table class="table table-bordered">
+            <thead class="table-light">
+              <tr>
+                <th>Câble</th>
+                <th>Statut du câble</th>
+                <th>GAM</th>
+                <th>Direction</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      found.forEach(c => {
+        const apa = String(c.APA || "").toUpperCase();
+        const apo = String(c.APO || "").toUpperCase();
+        let direction = "-";
+        if (apa === ap) direction = "Arrivée (APA)";
+        else if (apo === ap) direction = "Départ (APO)";
+
+        html += `
+          <tr>
+            <td>${c.CBL}</td>
+            <td>${c.STT_CBL_BORD || "-"}</td>
+            <td>${c.GAM || "-"}</td>
+            <td>${direction}</td>
+          </tr>
+        `;
       });
+      html += `</tbody></table></div>`;
+
       resultDiv.innerHTML = html;
     }
 
@@ -137,14 +173,15 @@
         return;
       }
 
-      // Filtrer dans la liste allApps
-      const matches = allApps.filter(a => a.startsWith(input)).slice(0, 15);
+      const matches = allApps
+        .filter(a => a.startsWith(input))
+        .slice(0, 15);
+
       if (matches.length === 0) {
         hideSuggestions();
         return;
       }
 
-      // Afficher la liste
       matches.forEach(app => {
         const item = document.createElement("div");
         item.className = "list-group-item list-group-item-action";
