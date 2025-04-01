@@ -18,27 +18,27 @@
   <div class="container">
     <h1 class="mb-3">Générer plusieurs fichiers JSON à partir du NEC</h1>
     <p>
-      Cette page va lire la feuille <code>"Cables"</code> de ton fichier <code>.xlsb</code>, et produire
-      un fichier JSON par colonne d’intérêt.<br>
+      Cette page va lire la feuille <code>"Cables"</code> de ton fichier <code>.xlsb</code>,
+      et produire un fichier JSON par colonne d’intérêt.<br>
       Chaque JSON contient <code>CBL</code> + la colonne ciblée.
     </p>
 
-    <!-- (Optionnel) Bouton pour charger depuis un URL si tu veux -->
-    <!-- <button class="btn btn-secondary mb-3" id="btnLoadUrl">Charger depuis URL</button> -->
+    <!-- ✅ Bouton de téléchargement direct du fichier NEC -->
+    <a href="https://share.chantiers-atlantique.com/share/proxy/alfresco/slingshot/node/content/workspace/SpacesStore/08213d03-1f34-4cb6-b1c8-ac94778059b8/Extraction_NEC_N34.xlsb?a=true"
+       class="btn btn-outline-secondary mb-3"
+       target="_blank"
+       download>
+      📥 Télécharger le fichier NEC (.xlsb)
+    </a>
 
     <!-- Input file pour charger localement -->
     <input type="file" id="fileInput" accept=".xlsb" class="form-control mb-3">
 
     <div id="message"></div>
-
     <div id="downloadLinks" class="mt-4"></div>
   </div>
 
   <script>
-    // URL possible (si tu veux charger depuis un lien direct)
-    // const XLSB_URL = "https://share.chantiers-atlantique.com/.../Extraction_NEC_N34.xlsb?a=true";
-
-    // Les 10 colonnes d'intérêt (en plus de 'CBL')
     const columnsOfInterest = [
       "GAM",
       "STT_CBL_BORD",
@@ -54,10 +54,6 @@
 
     document.getElementById("fileInput").addEventListener("change", handleFile);
 
-    // (Optionnel) Pour charger depuis l'URL, si tu actives le bouton
-    // document.getElementById("btnLoadUrl").addEventListener("click", loadFromUrl);
-
-    // --- 1) Charger un fichier local ---
     function handleFile(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -77,56 +73,30 @@
       reader.readAsArrayBuffer(file);
     }
 
-    // --- 2) (Optionnel) Charger depuis URL ---
-    async function loadFromUrl() {
-      showMsg("⏳ Chargement depuis l'URL...", "info");
-      try {
-        const resp = await fetch(XLSB_URL);
-        if (!resp.ok) {
-          throw new Error("Erreur HTTP " + resp.status);
-        }
-        const arrayBuf = await resp.arrayBuffer();
-        parseAndSplitColumns(arrayBuf);
-      } catch (err) {
-        console.error(err);
-        showMsg("❌ Erreur : " + err.message, "danger");
-      }
-    }
-
-    // --- 3) Parser le XLSB, trouver "Cables" et générer 10 JSON distincts ---
     function parseAndSplitColumns(arrayBuf) {
       try {
         const workbook = XLSX.read(arrayBuf, { type: "array" });
-        // Feuille "Cables" (insensible à la casse)
         const sheetName = workbook.SheetNames.find(n => n.toLowerCase().includes("cables"));
         if (!sheetName) {
           showMsg("❌ Feuille 'Cables' non trouvée", "danger");
           return;
         }
 
-        // Convertir en JSON brut
         const sheet = workbook.Sheets[sheetName];
         const jsonRaw = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-        // On va créer un JSON = "cables_<col>.json" pour chaque col
         const linksContainer = document.getElementById("downloadLinks");
-        linksContainer.innerHTML = ""; // on vide d'abord
+        linksContainer.innerHTML = "";
 
-        // Pour chaque colonne d'intérêt
         columnsOfInterest.forEach(col => {
-          // On récupère un tableau "CBL" + la colonne
-          const minimalData = jsonRaw.map(row => {
-            return {
-              CBL: row["CBL"] || "",
-              [col]: row[col] || ""
-            };
-          });
+          const minimalData = jsonRaw.map(row => ({
+            CBL: row["CBL"] || "",
+            [col]: row[col] || ""
+          }));
 
-          // On génère un blob JSON
           const blob = new Blob([JSON.stringify(minimalData, null, 2)], { type: "application/json" });
           const url = URL.createObjectURL(blob);
 
-          // On crée un lien de téléchargement
           const fileName = `cables_${col}.json`;
           const link = document.createElement("a");
           link.href = url;
@@ -134,7 +104,6 @@
           link.className = "btn btn-primary me-2 mb-2";
           link.textContent = `Télécharger ${fileName}`;
 
-          // On l'ajoute à la page
           linksContainer.appendChild(link);
         });
 
@@ -145,14 +114,12 @@
       }
     }
 
-    // Simple util pour afficher un message
     function showMsg(msg, type = "info") {
       document.getElementById("message").innerHTML =
         `<div class="alert alert-${type}">${msg}</div>`;
     }
   </script>
 
-  <!-- Script Bootstrap pour la navbar responsive -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
