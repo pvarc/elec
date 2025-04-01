@@ -57,7 +57,7 @@
   <script>
     const colonnes = [
       "GAM", "STT_CBL_BORD", "RESP_TIRAGE", "APO", "LOT_MTG_APO", "APA",
-      "LOT_MTG_APA", "PT_CBL", "COD_PLAN", "LOCAL_APO", "LOCAL_APA", 
+      "LOT_MTG_APA", "PT_CBL", "COD_PLAN", "LOCAL_APO", "LOCAL_APA"
     ];
     let cables = [];
     let allApps = []; // Stocker la liste unique de tous APA et APO
@@ -69,6 +69,7 @@
     async function loadAllData() {
       let merged = {};
       for (const col of colonnes) {
+        // Charger chaque fichier JSON (cables_<col>.json)
         const res = await fetch(`json/cables_${col}.json`);
         const rows = await res.json();
         rows.forEach(row => {
@@ -79,11 +80,14 @@
       }
       cables = Object.values(merged);
 
-      // Construire la liste des appareils distincts
+      // Construire la liste des appareils distincts (APA et APO),
+      // en forçant la conversion en string (pour éviter les erreurs).
       let appsSet = new Set();
       cables.forEach(c => {
-        if (c.APA) appsSet.add(c.APA.toUpperCase());
-        if (c.APO) appsSet.add(c.APO.toUpperCase());
+        const apa = String(c.APA || "").toUpperCase();
+        const apo = String(c.APO || "").toUpperCase();
+        if (apa) appsSet.add(apa);
+        if (apo) appsSet.add(apo);
       });
       allApps = Array.from(appsSet);
     }
@@ -92,10 +96,14 @@
       const ap = document.getElementById("apInput").value.trim().toUpperCase();
       if (!ap) return;
       hideSuggestions();
-      const found = cables.filter(c =>
-        (c.APA && c.APA.toUpperCase() === ap) ||
-        (c.APO && c.APO.toUpperCase() === ap)
-      );
+
+      // Filtrer les câbles où APA == ap ou APO == ap, en string-safe
+      const found = cables.filter(c => {
+        const apa = String(c.APA || "").toUpperCase();
+        const apo = String(c.APO || "").toUpperCase();
+        return apa === ap || apo === ap;
+      });
+
       renderResults(found, ap);
     }
 
@@ -129,12 +137,14 @@
         return;
       }
 
+      // Filtrer dans la liste allApps
       const matches = allApps.filter(a => a.startsWith(input)).slice(0, 15);
       if (matches.length === 0) {
         hideSuggestions();
         return;
       }
 
+      // Afficher la liste
       matches.forEach(app => {
         const item = document.createElement("div");
         item.className = "list-group-item list-group-item-action";
@@ -161,6 +171,7 @@
       }
     }
 
+    // Charger toutes les données au démarrage
     loadAllData();
   </script>
 
