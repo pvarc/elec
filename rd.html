@@ -199,7 +199,7 @@
 
       appareils.forEach(app => {
         const found = cables.filter(c => {
-          const apa = (c.APA || "").toUpperCase();
+          const apa = String(c.APA || "").toUpperCase();
           const apo = (c.APO || "").toUpperCase();
           return (apa === app || apo === app);
         });
