@@ -63,7 +63,9 @@
 
     <!-- 2) Champ multi-appareils -->
     <div class="mb-3">
-      <label for="appareilsInput" class="form-label">Appareils (ex: "VEDDH603C1 TR1234; STT701"): </label>
+      <label for="appareilsInput" class="form-label">
+        Appareils (ex: "VEDDH603C1 TR1234; STT701"):
+      </label>
       <textarea id="appareilsInput" rows="2" class="form-control"></textarea>
     </div>
 
@@ -83,6 +85,7 @@
     let cables = []; // { CBL, APA, APO, GAM, STT_CBL_BORD, LOCAL_APA, LOT_MTG_APA, LOCAL_APO, LOT_MTG_APO, ... }
     let globalResults = [];
 
+    // Colonnes à extraire si on charge un XLSB :
     const columnsOfInterest = [
       "APA", "APO", "GAM", "STT_CBL_BORD",
       "LOCAL_APA", "LOT_MTG_APA",
@@ -106,7 +109,6 @@
       document.getElementById("baseIndicator").textContent = `Base : ${currentBase}`;
     }
 
-    // ---------------------------------------
     // 1) Charger JSON par défaut
     async function loadFromJSON() {
       currentBase = "JSON par défaut";
@@ -131,13 +133,12 @@
       cables = Object.values(merged);
     }
 
-    // ---------------------------------------
     // 2) Charger un XLSB
     function handleFileXLSB(e) {
       const file = e.target.files[0];
       if (!file) return;
 
-      // 🔥 Afficher le message de chargement
+      // Afficher le message de chargement
       document.getElementById("loadingMsg").style.display = "block";
 
       const reader = new FileReader();
@@ -177,17 +178,17 @@
         console.error(err);
         alert("Erreur XLSB : " + err.message);
       } finally {
-        // 🔥 On masque le message quoiqu'il arrive
+        // On masque le message de chargement, quoi qu'il arrive
         document.getElementById("loadingMsg").style.display = "none";
       }
     }
 
-    // ---------------------------------------
     // 3) Recherche multi-appareils
     function searchMultiAppareils() {
       const input = document.getElementById("appareilsInput").value.trim();
       if (!input) return;
 
+      // Split par espace, virgule, point-virgule, etc.
       const appareils = input.split(/[\s,;]+/)
                             .filter(Boolean)
                             .map(a => a.toUpperCase());
@@ -198,19 +199,24 @@
       globalResults = [];
 
       appareils.forEach(app => {
+        // Filtrage
         const found = cables.filter(c => {
           const apa = String(c.APA || "").toUpperCase();
-          const apo = (c.APO || "").toUpperCase();
+          const apo = String(c.APO || "").toUpperCase();
           return (apa === app || apo === app);
         });
 
+        // Table HTML
         const tableHTML = buildTableForApp(app, found);
         resultsArea.innerHTML += tableHTML;
 
+        // On stocke dans globalResults
         found.forEach(c => {
-          // Determiner local/lot correspondants
           let local = "";
           let lot   = "";
+          const apa = String(c.APA || "").toUpperCase();
+          const apo = String(c.APO || "").toUpperCase();
+
           if (apa === app) {
             local = c.LOCAL_APA || "";
             lot   = c.LOT_MTG_APA || "";
@@ -267,12 +273,11 @@
       return html;
     }
 
-    // ---------------------------------------
     // 4) Export en Excel
     function exportToExcel(onlyNonTires) {
       let dataToExport = globalResults;
       if (onlyNonTires) {
-        dataToExport = dataToExport.filter(r => r.Statut.toUpperCase() !== "T");
+        dataToExport = dataToExport.filter(r => (r.Statut || "").toUpperCase() !== "T");
       }
       if (!dataToExport.length) {
         alert("Aucune donnée à exporter.");
@@ -288,7 +293,6 @@
       XLSX.writeFile(wb, fileName);
     }
 
-    // ---------------------------------------
     // 5) Export appareils dont TOUS les câbles = T, parmi ceux recherchés
     function exportOkAppareils() {
       let deviceMap = {};
