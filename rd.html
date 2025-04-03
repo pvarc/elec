@@ -237,41 +237,55 @@
         });
       });
     }
+// petite fonction pour construire retour app
+function buildTable(app, list) {
+  if (!list.length) {
+    return `<h4>${app}</h4><div class="alert alert-warning">Aucun câble trouvé.</div>`;
+  }
 
-    function buildTableForApp(appareil, arrCables) {
-      if (arrCables.length === 0) {
-        return `<h4>Appareil "${appareil}"</h4>
-                <div class="alert alert-warning">
-                  Aucun câble trouvé pour cet appareil.
-                </div>`;
-      }
-      let html = `<div class="appareil-table">`;
-      html += `<h4>Appareil "${appareil}" - ${arrCables.length} câble(s) :</h4>`;
-      html += `
-        <div class="table-responsive">
-          <table class="table table-bordered">
-            <thead class="table-light">
-              <tr>
-                <th>Appareil</th>
-                <th>Câble</th>
-                <th>GAM</th>
-                <th>Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-      `;
-      arrCables.forEach(c => {
-        html += `
-          <tr>
-            <td>${appareil}</td>
-            <td>${c.CBL}</td>
-            <td>${c.GAM || "-"}</td>
-            <td>${c.STT_CBL_BORD || "-"}</td>
-          </tr>`;
-      });
-      html += `</tbody></table></div></div>`;
-      return html;
+  // Trouver local et lot associés à cet appareil (sur 1er câble trouvé)
+  let first = list.find(c => {
+    const apa = String(c.APA || "").toUpperCase();
+    const apo = String(c.APO || "").toUpperCase();
+    return (apa === app || apo === app);
+  });
+
+  let local = "";
+  let lot = "";
+  if (first) {
+    const apa = String(first.APA || "").toUpperCase();
+    const apo = String(first.APO || "").toUpperCase();
+    if (apa === app) {
+      local = first.LOCAL_APA || "";
+      lot = first.LOT_MTG_APA || "";
+    } else if (apo === app) {
+      local = first.LOCAL_APO || "";
+      lot = first.LOT_MTG_APO || "";
     }
+  }
+
+  let rows = list.map(c => `
+    <tr>
+      <td>${app}</td>
+      <td>${c.CBL}</td>
+      <td>${c.GAM || "-"}</td>
+      <td>${c.STT_CBL_BORD || "-"}</td>
+    </tr>`).join("");
+
+  return `
+    <div class="appareil-table">
+      <h4>${app} – ${list.length} câble(s) <br><small class="text-muted">Lot : ${lot || "-"} / Local : ${local || "-"}</small></h4>
+      <div class="table-responsive">
+        <table class="table table-bordered">
+          <thead class="table-light">
+            <tr><th>Appareil</th><th>Câble</th><th>GAM</th><th>Statut</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
 
     // 4) Export en Excel
     function exportToExcel(onlyNonTires) {
