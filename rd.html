@@ -82,21 +82,21 @@
   </div>
 
   <script>
-    let cables = []; // { CBL, APA, APO, PT_CBL, GAM, STT_CBL_BORD, LOCAL_APA, LOT_MTG_APA, LOCAL_APO, LOT_MTG_APO, ... }
+    let cables = []; // { CBL, APA, APO, PT_CBL, RESP_TIRAGE, GAM, STT_CBL_BORD, LOCAL_APA, LOT_MTG_APA, LOCAL_APO, LOT_MTG_APO, ... }
     let globalResults = [];
 
     // Colonnes à extraire si on charge un XLSB :
-    // !!! On supprime COD_PLAN et on ajoute PT_CBL !!!
+    // On ajoute "RESP_TIRAGE" pour récupérer la colonne depuis XLSB/JSON
     const columnsOfInterest = [
       "APA", "APO", 
-      "PT_CBL",           // ajouté
+      "PT_CBL",
+      "RESP_TIRAGE",    // <-- on récupère le champ depuis cables_RESP_TIRAGE.json
       "GAM", 
       "STT_CBL_BORD",
       "LOCAL_APA", 
       "LOT_MTG_APA",
       "LOCAL_APO", 
       "LOT_MTG_APO"
-      // COD_PLAN supprimé
     ];
     let currentBase = "inconnue";
 
@@ -124,7 +124,7 @@
       let merged = {};
       for (const col of columnsOfInterest) {
         try {
-          const url = `json/cables_${col}.json`;
+          const url = `json/cables_${col}.json`;  // ex: cables_RESP_TIRAGE.json
           const resp = await fetch(url);
           if (!resp.ok) continue;
           const rows = await resp.json();
@@ -233,13 +233,14 @@
             lot   = c.LOT_MTG_APO || "";
           }
 
-          // On ajoute PT_CBL dans le push (ajouté) :
+          // On ajoute le champ RespTirage pour l'export
           globalResults.push({
             Appareil: app,
             Câble: c.CBL,
-            PT_CBL: c.PT_CBL || "",   // ajouté
+            PT_CBL: c.PT_CBL || "",
             GAM: c.GAM || "",
             Statut: c.STT_CBL_BORD || "",
+            RespTirage: c.RESP_TIRAGE || "",  // <-- nouveau champ
             Local: local,
             Lot: lot
           });
@@ -248,6 +249,7 @@
     }
 
     // petite fonction pour construire la table HTML
+    // si tu ne veux pas afficher RespTirage, supprime la colonne <th> et <td>
     function buildTableForApp(app, list) {
       if (!list.length) {
         return `<h4>${app}</h4><div class="alert alert-warning">Aucun câble trouvé.</div>`;
@@ -274,26 +276,30 @@
         }
       }
 
-      // On ajoute une colonne "PT_CBL" si on souhaite l’afficher
+      // On ajoute une colonne "Resp. Tirage" si on souhaite l’afficher
       let rows = list.map(c => `
         <tr>
           <td>${app}</td>
           <td>${c.CBL}</td>
-          <td>${c.PT_CBL || "-"}</td>   <!-- ajouté -->
+          <td>${c.PT_CBL || "-"}</td>
+          <td>${c.RESP_TIRAGE || "-"}</td> <!-- affichage du responsable de tirage -->
           <td>${c.GAM || "-"}</td>
           <td>${c.STT_CBL_BORD || "-"}</td>
         </tr>`).join("");
 
       return `
         <div class="appareil-table">
-          <h4>${app} – ${list.length} câble(s) <br><small class="text-muted">Lot : ${lot || "-"} / Local : ${local || "-"}</small></h4>
+          <h4>${app} – ${list.length} câble(s) 
+            <br><small class="text-muted">Lot : ${lot || "-"} / Local : ${local || "-"}</small>
+          </h4>
           <div class="table-responsive">
             <table class="table table-bordered">
               <thead class="table-light">
                 <tr>
                   <th>Appareil</th>
                   <th>Câble</th>
-                  <th>PT_CBL</th>  <!-- ajouté -->
+                  <th>PT_CBL</th>
+                  <th>Resp. Tirage</th>
                   <th>GAM</th>
                   <th>Statut</th>
                 </tr>
@@ -315,9 +321,18 @@
         return;
       }
 
-      // On inclut "PT_CBL" dans l'export
+      // On inclut la colonne "RespTirage" dans l'export
       const ws = XLSX.utils.json_to_sheet(dataToExport, {
-        header: ["Appareil", "Câble", "PT_CBL", "GAM", "Statut", "Local", "Lot"]
+        header: [
+          "Appareil", 
+          "Câble", 
+          "PT_CBL", 
+          "GAM", 
+          "Statut", 
+          "RespTirage",  // <-- nouveau champ dans le header
+          "Local", 
+          "Lot"
+        ]
       });
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Export");
